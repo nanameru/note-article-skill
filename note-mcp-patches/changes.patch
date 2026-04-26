@@ -1,0 +1,562 @@
+diff --git a/src/note_mcp/api/articles.py b/src/note_mcp/api/articles.py
+index 0b62c2c..4679902 100644
+--- a/src/note_mcp/api/articles.py
++++ b/src/note_mcp/api/articles.py
+@@ -817,6 +817,13 @@ async def publish_article(
+     article_id: str | None = None,
+     article_input: ArticleInput | None = None,
+     tags: list[str] | None = None,
++    *,
++    magazine_keys: list[str] | None = None,
++    circle_plan_keys: list[str] | None = None,
++    price: int | None = None,
++    separator_uuid: str | None = None,
++    limited: bool | None = None,
++    disable_comment: bool | None = None,
+ ) -> Article:
+     """Publish an article.
+ 
+@@ -896,6 +903,25 @@ async def publish_article(
+                 if hashtags:
+                     payload["hashtags"] = hashtags
+ 
++            # Optional paid / magazine / membership fields (reverse-engineered
++            # from the editor's actual PUT payload — confirmed 2026-04).
++            if magazine_keys is not None:
++                payload["magazine_keys"] = list(magazine_keys)
++            if circle_plan_keys is not None:
++                payload["circle_permissions"] = (
++                    [{"kind": "circle_plan", "keys": list(circle_plan_keys)}]
++                    if circle_plan_keys
++                    else []
++                )
++            if price is not None:
++                payload["price"] = price
++            if separator_uuid is not None:
++                payload["separator"] = separator_uuid
++            if limited is not None:
++                payload["limited"] = limited
++            if disable_comment is not None:
++                payload["disable_comment"] = disable_comment
++
+             response = await client.put(f"/v1/text_notes/{numeric_id}", json=payload)
+ 
+         # Validate API response for logical failure
+@@ -1254,3 +1280,163 @@ async def delete_all_drafts(
+         failed_articles=failed_articles,
+         message=message,
+     )
++
++
++# =============================================================================
++# Paid article support (price + paywall separator)
++# =============================================================================
++#
++# Reverse-engineered from /v3/notes/{key} responses and confirmed via direct
++# experiments on /v1/text_notes/draft_save:
++#
++# - `price` (int, JPY) — paid article price; 0 means free
++# - `separator` (UUID string) — points to a block (`<p>` / `<h2>` / etc) in the
++#   HTML body via its `name`/`id` attribute. Everything after that block is
++#   the paid section. The block must already exist in the body (`markdown_to_html`
++#   stamps every block with a UUID, so any heading/paragraph UUID is valid).
++#
++# Magazine assignment (`belonging_magazine_keys`) is NOT exposed via this
++# endpoint as of 2026-04 — needs a separate as-yet-undiscovered endpoint.
++
++
++import re as _re_paid
++
++
++_BLOCK_UUID_PATTERN = _re_paid.compile(
++    r'<(h2|h3|h4|p)[^>]*\bname="([0-9a-f-]{36})"[^>]*>(.*?)</\1>',
++    _re_paid.DOTALL,
++)
++
++
++async def get_separator_candidates(
++    session: Session,
++    article_id: str,
++) -> list[dict[str, Any]]:
++    """List candidate UUIDs in the article body for use as a paywall separator.
++
++    The paywall position on a paid note is set via the `separator` field, which
++    references a block element's UUID inside the HTML body. This function reads
++    the raw HTML body (from `note_draft.body` for drafts, or `data.body` for
++    published notes) and returns each block (h2/h3/h4/p) with its UUID, level,
++    and a short text preview, so a human (or LLM) can pick which one marks the
++    "from here is paid" boundary.
++
++    Args:
++        session: Authenticated session
++        article_id: Article key (e.g. "n123abc...") or numeric ID
++
++    Returns:
++        List of dicts:
++            [{"uuid": str, "level": "h2"|"h3"|"h4"|"p", "text": str}, ...]
++    """
++    raw = await _fetch_raw_note_data(session, article_id)
++    note_draft = raw.get("note_draft") or {}
++    # Drafts have full HTML with UUIDs in note_draft.body. Published notes have
++    # it in data.body. We prefer the draft body when available so paywall
++    # candidates reflect the latest in-progress edit.
++    html_body = note_draft.get("body") or raw.get("body") or ""
++
++    candidates: list[dict[str, Any]] = []
++    for match in _BLOCK_UUID_PATTERN.finditer(html_body):
++        level = match.group(1)
++        block_uuid = match.group(2)
++        inner = _re_paid.sub(r"<[^>]+>", "", match.group(3))
++        inner = html.unescape(inner).strip()
++        if len(inner) > 80:
++            inner = inner[:77] + "..."
++        candidates.append({"uuid": block_uuid, "level": level, "text": inner})
++    return candidates
++
++
++async def set_paid_settings(
++    session: Session,
++    article_id: str,
++    *,
++    price: int | None = None,
++    separator_uuid: str | None = None,
++) -> dict[str, Any]:
++    """Set paid article settings (price + paywall position) on a draft.
++
++    Updates the draft via `/v1/text_notes/draft_save` with `price` and/or
++    `separator` fields. Both are optional, but at least one must be provided.
++
++    The article remains a draft after this call. Publish separately with
++    `publish_article`.
++
++    Args:
++        session: Authenticated session
++        article_id: Article key or numeric ID
++        price: Paid article price in JPY. Use 0 to make the note free.
++        separator_uuid: UUID of an existing block in the body that marks the
++            "from here is paid" boundary. Use `get_separator_candidates` to
++            list valid UUIDs.
++
++    Returns:
++        dict with the resulting `price`, `separator`, `is_limited`, and
++        `article_key` fields after the update.
++
++    Raises:
++        ValueError: If neither price nor separator_uuid is provided
++        NoteAPIError: If the API request fails
++    """
++    if price is None and separator_uuid is None:
++        raise ValueError("At least one of price or separator_uuid must be provided")
++
++    numeric_id = await _resolve_numeric_note_id(session, article_id)
++
++    # Fetch raw HTML body — draft_save expects the original HTML (with UUID
++    # block markers) in the payload, NOT the Markdown form returned by the
++    # public API surface.
++    raw = await _fetch_raw_note_data(session, article_id)
++    note_draft = raw.get("note_draft") or {}
++    body = note_draft.get("body") or raw.get("body") or ""
++    title = note_draft.get("name") or raw.get("name") or ""
++
++    # Compute body_length the same way note.com's editor does
++    # (length of plain-text — strip tags)
++    plain_text_length = len(_re_paid.sub(r"<[^>]+>", "", body))
++
++    payload: dict[str, Any] = {
++        "name": title,
++        "body": body,
++        "body_length": plain_text_length,
++        "index": False,
++        "is_lead_form": False,
++    }
++    if price is not None:
++        payload["price"] = price
++    if separator_uuid is not None:
++        # Empty string clears the separator (note.com convention)
++        payload["separator"] = separator_uuid
++
++    async with NoteAPIClient(session) as client:
++        await client.post(
++            f"/v1/text_notes/draft_save?id={numeric_id}&is_temp_saved=true",
++            json=payload,
++        )
++
++    # Re-fetch to confirm
++    refreshed = await get_article_via_api(session, article_id)
++    raw = await _fetch_raw_note_data(session, article_id)
++    return {
++        "article_id": numeric_id,
++        "article_key": refreshed.key,
++        "price": raw.get("price"),
++        "separator": raw.get("separator"),
++        "is_limited": raw.get("is_limited"),
++    }
++
++
++async def _fetch_raw_note_data(
++    session: Session,
++    article_id: str,
++) -> dict[str, Any]:
++    """Fetch the raw `/v3/notes/{key}` response data dict (not parsed to Article)."""
++    article_key = (
++        article_id
++        if _is_article_key_format(article_id)
++        else (await get_article_via_api(session, article_id)).key
++    )
++    async with NoteAPIClient(session) as client:
++        response = await client.get(f"/v3/notes/{article_key}")
++    return response.get("data", {}) or {}
+diff --git a/src/note_mcp/auth/browser.py b/src/note_mcp/auth/browser.py
+index 2ad455f..4f8266d 100644
+--- a/src/note_mcp/auth/browser.py
++++ b/src/note_mcp/auth/browser.py
+@@ -550,13 +550,14 @@ async def login_with_browser(
+             username = user_info["urlname"]
+             logger.info(f"User info from API: {username} (ID: {user_id})")
+         except ValueError as e:
+-            # Article 6: No placeholder values allowed
+-            # All three methods failed to retrieve user info
+-            raise ValueError(
+-                "Failed to retrieve user information after successful login. "
+-                "All methods (noteInitData, profile URL, API) failed. "
+-                f"Last error: {e}"
+-            ) from e
++            # All three methods failed — persist the cookies anyway so the user
++            # can recover by calling note_set_username instead of having to log
++            # in again (which is rate-limited by note.com).
++            logger.warning(
++                "Failed to auto-detect username (last error: %s). "
++                "Saving session with empty username — call note_set_username to set it manually.",
++                e,
++            )
+ 
+     # Create session
+     session = Session(
+diff --git a/src/note_mcp/server.py b/src/note_mcp/server.py
+index 9d3a0ec..b5e8d16 100644
+--- a/src/note_mcp/server.py
++++ b/src/note_mcp/server.py
+@@ -16,11 +16,14 @@ from note_mcp.api.articles import (
+     delete_all_drafts,
+     delete_draft,
+     get_article,
++    get_separator_candidates,
+     list_articles,
+     publish_article,
++    set_paid_settings,
+     update_article,
+ )
+ from note_mcp.api.images import insert_image_via_api, upload_body_image, upload_eyecatch_image
++from note_mcp.api.magazines import list_circle_plans, list_my_magazines
+ from note_mcp.api.preview import get_preview_html
+ from note_mcp.auth.browser import login_with_browser
+ from note_mcp.auth.session import SessionManager
+@@ -412,6 +415,21 @@ async def note_publish_article(
+     title: Annotated[str | None, "記事タイトル（新規作成時は必須）"] = None,
+     body: Annotated[str | None, "記事本文（Markdown形式、新規作成時は必須）"] = None,
+     tags: Annotated[list[str] | None, "記事のタグ（#なしでも可）"] = None,
++    magazine_keys: Annotated[
++        list[str] | None,
++        "追加するマガジンのキー一覧（例: ['md54238f207bd']）。note_list_my_magazines で取得。",
++    ] = None,
++    circle_plan_keys: Annotated[
++        list[str] | None,
++        "メンバーシップ（月額プラン）のプランキー一覧（例: ['458a7b74051c']）。note_list_circle_plans で取得。",
++    ] = None,
++    price: Annotated[int | None, "有料記事の価格（円、0で無料）"] = None,
++    separator_uuid: Annotated[
++        str | None,
++        "有料エリアの開始位置（ブロックUUID）。note_get_separator_candidates で取得。",
++    ] = None,
++    limited: Annotated[bool | None, "有料記事フラグ。priceを指定する場合はTrueにする。"] = None,
++    disable_comment: Annotated[bool | None, "コメントを無効化する"] = None,
+ ) -> str:
+     """記事を公開します。
+ 
+@@ -419,8 +437,7 @@ async def note_publish_article(
+     article_idを指定すると既存の下書きを公開します。
+     title/bodyを指定すると新規記事を作成して公開します。
+ 
+-    既存の下書きを公開する際、tagsが未指定でfile_pathが指定されている場合、
+-    Markdownファイルのフロントマターからタグを取得します。
++    オプションでマガジン追加・メンバーシップ限定・有料記事化が可能です。
+ 
+     Args:
+         article_id: 公開する下書き記事のID（新規作成時は省略）
+@@ -428,6 +445,12 @@ async def note_publish_article(
+         title: 記事タイトル（新規作成時は必須）
+         body: 記事本文（Markdown形式、新規作成時は必須）
+         tags: 記事のタグ（オプション、file_pathより優先）
++        magazine_keys: 追加するマガジンのキー一覧
++        circle_plan_keys: メンバーシップ（月額プラン）のプランキー一覧
++        price: 有料記事の価格（円）
++        separator_uuid: 有料エリア開始位置のブロックUUID
++        limited: 有料記事フラグ
++        disable_comment: コメント無効化
+ 
+     Returns:
+         公開結果のメッセージ（記事URLを含む）
+@@ -454,7 +477,17 @@ async def note_publish_article(
+                 except ValueError as e:
+                     return f"ファイル解析エラー: {e}"
+ 
+-            article = await publish_article(session, article_id=article_id, tags=publish_tags)
++            article = await publish_article(
++                session,
++                article_id=article_id,
++                tags=publish_tags,
++                magazine_keys=magazine_keys,
++                circle_plan_keys=circle_plan_keys,
++                price=price,
++                separator_uuid=separator_uuid,
++                limited=limited,
++                disable_comment=disable_comment,
++            )
+         elif title is not None and body is not None:
+             # Create and publish new article (file_path is ignored for new articles)
+             article_input = ArticleInput(
+@@ -775,6 +808,148 @@ async def note_delete_all_drafts(
+         return f"一括削除に失敗しました: {e.message}"
+ 
+ 
++@mcp.tool()
++@handle_api_error
++@require_session
++async def note_set_paid_settings(
++    article_id: Annotated[str, "記事ID（キー形式 'n123abc...' または数値）"],
++    price: Annotated[int | None, "有料記事の価格（円）。0で無料に戻す。"] = None,
++    separator_uuid: Annotated[
++        str | None,
++        "有料エリアの開始位置を示すブロックUUID。note_get_separator_candidates で候補一覧を取得できる。空文字で解除。",
++    ] = None,
++    *,
++    session: Session,
++) -> str:
++    """記事の有料設定（価格・有料ライン）を更新します。
++
++    note.com の有料記事は、本文中のあるブロック（見出しや段落）から後ろを
++    有料部分として販売できます。このツールでは下書き状態のまま価格と有料ラインを
++    設定し、公開は別途 note_publish_article で行います。
++
++    マガジン追加には対応していません（note.com のWebエディタから手動で行ってください）。
++
++    Args:
++        article_id: 対象の記事ID
++        price: 価格（円）。Noneなら変更しない、0なら無料に戻す
++        separator_uuid: 有料エリア開始のブロックUUID。Noneなら変更しない、""で解除
++
++    Returns:
++        更新結果のメッセージ
++    """
++    if price is None and separator_uuid is None:
++        return "priceまたはseparator_uuidの少なくとも1つを指定してください。"
++
++    result = await set_paid_settings(
++        session,
++        article_id,
++        price=price,
++        separator_uuid=separator_uuid,
++    )
++
++    lines = [
++        f"有料設定を更新しました（記事キー: {result.get('article_key')}）。",
++        f"  price: {result.get('price')} 円",
++        f"  separator: {result.get('separator')}",
++        f"  is_limited: {result.get('is_limited')}",
++    ]
++    return "\n".join(lines)
++
++
++@mcp.tool()
++@handle_api_error
++@require_session
++async def note_get_separator_candidates(
++    article_id: Annotated[str, "記事ID（キー形式 'n123abc...' または数値）"],
++    *,
++    session: Session,
++) -> str:
++    """有料エリア開始位置の候補ブロック一覧を取得します。
++
++    note.com の有料記事では `separator` フィールドに本文中のブロックUUIDを指定し、
++    そのブロックから後ろが有料エリアになります。本文中の各ブロック（h2/h3/h4/p）には
++    UUID が振られているため、そのうちのどれを「ここから有料」にするか選ぶ必要があります。
++
++    このツールはそれらの候補を、テキストプレビュー付きで一覧表示します。
++
++    Returns:
++        UUIDとテキストの一覧（Markdown形式）
++    """
++    candidates = await get_separator_candidates(session, article_id)
++    if not candidates:
++        return "本文中にブロックが見つかりませんでした。本文を保存してから再度実行してください。"
++
++    lines = [f"有料エリア開始位置の候補（{len(candidates)}件）:", ""]
++    for c in candidates:
++        lines.append(f"- [{c['level']}] `{c['uuid']}` — {c['text']}")
++    return "\n".join(lines)
++
++
++@mcp.tool()
++@handle_api_error
++@require_session
++async def note_list_circle_plans(
++    *,
++    session: Session,
++) -> str:
++    """自分が運営しているメンバーシップ（月額プラン）の一覧を取得します。
++
++    note.com の「メンバーシップ（旧サークル）」機能で設定した月額プランを返します。
++    記事公開時に `circle_plan_keys` パラメータでこのキーを渡すと、
++    プラン会員限定の記事になります。
++
++    Returns:
++        プラン一覧（Markdown形式）。各プランのキー・名前・月額・期間を表示します。
++    """
++    plans = await list_circle_plans(session)
++    if not plans:
++        return "メンバーシッププランが見つかりませんでした。"
++
++    lines = [f"メンバーシッププラン一覧（{len(plans)}件）:", ""]
++    for p in plans:
++        key = p.get("key")
++        name = p.get("name")
++        price = p.get("price", 0)
++        start = (p.get("start_at") or "")[:10]
++        lines.append(f"- `{key}` — {name!r} ¥{price}/月 (開始: {start})")
++    return "\n".join(lines)
++
++
++@mcp.tool()
++@handle_api_error
++@require_session
++async def note_list_my_magazines(
++    *,
++    session: Session,
++) -> str:
++    """自分が所有しているマガジンの一覧を取得します。
++
++    `/v1/my/magazines` だけでは取得できないマガジン種別（`m*` プレフィックス、
++    定期購読対応マガジン）も含めて返します。
++
++    Returns:
++        マガジン一覧（Markdown形式）。各マガジンのキー・名前・価格・ステータス・
++        定期購読対応・所有者かどうかを表示します。
++    """
++    magazines = await list_my_magazines(session)
++    if not magazines:
++        return "マガジンが見つかりませんでした。"
++
++    lines = [f"マガジン一覧（{len(magazines)}件）:", ""]
++    for m in magazines:
++        is_author = m.get("isAuthor", m.get("is_my_magazine"))
++        is_sub = m.get("isSubscribable", m.get("is_subscribable"))
++        price = m.get("price", 0)
++        status = m.get("status")
++        marker_author = " 👑" if is_author else ""
++        marker_sub = " (📅 定期購読可)" if is_sub else ""
++        marker_paid = f" ¥{price}" if price else ""
++        lines.append(
++            f"- `{m.get('key')}` — {m.get('name')!r} [{status}]{marker_paid}{marker_author}{marker_sub}"
++        )
++    return "\n".join(lines)
++
++
+ # Register investigator tools if in investigator mode
+ if os.environ.get("INVESTIGATOR_MODE") == "1":
+     register_investigator_tools(mcp)
+diff --git a/src/note_mcp/api/magazines.py b/src/note_mcp/api/magazines.py
+new file mode 100644
+index 0000000..2da068a
+--- /dev/null
++++ b/src/note_mcp/api/magazines.py
+@@ -0,0 +1,90 @@
++"""Magazine operations for note.com API.
++
++Provides read-only listing of the authenticated user's own magazines.
++
++Note: as of 2026-04 the add-note-to-magazine endpoint has not been identified
++through reverse-engineering of the public bundles. Magazine assignment must be
++done manually via note.com's web editor.
++"""
++
++from __future__ import annotations
++
++import logging
++from typing import Any
++
++from note_mcp.api.client import NoteAPIClient
++from note_mcp.models import ErrorCode, NoteAPIError, Session
++
++logger = logging.getLogger(__name__)
++
++
++async def list_my_magazines(
++    session: Session,
++    username: str | None = None,
++) -> list[dict[str, Any]]:
++    """List the authenticated user's own magazines.
++
++    Uses `/v2/creators/{username}/contents?kind=magazine`. Unlike
++    `/v1/my/magazines`, this endpoint returns BOTH `m*` and `md*` prefixed
++    magazines (i.e. all kinds the user owns).
++
++    Args:
++        session: Authenticated session
++        username: note.com username. If None, uses the username stored on the
++            session (set by `note_login` or `note_set_username`).
++
++    Returns:
++        List of magazine dicts. Each dict includes (subset):
++            - id (int)
++            - key (str, e.g. "m755534d40888")
++            - name (str)
++            - price (int) — 0 for free magazines
++            - status (str) — "public" / "private" / etc
++            - isSubscribable (bool) — true if monthly subscription is enabled
++            - isAuthor (bool) — true if the user owns this magazine
++            - magazine_url (str, when computable)
++    """
++    target_username = username or getattr(session, "username", None)
++    if not target_username:
++        raise NoteAPIError(
++            code=ErrorCode.INVALID_INPUT,
++            message=(
++                "username is required to list magazines. "
++                "Pass it explicitly or call note_set_username first."
++            ),
++        )
++
++    path = f"/v2/creators/{target_username}/contents"
++    async with NoteAPIClient(session) as client:
++        response = await client.get(path, params={"kind": "magazine"})
++
++    data = response.get("data", {}) or {}
++    contents = data.get("contents", []) or []
++    return [m for m in contents if isinstance(m, dict)]
++
++
++async def list_circle_plans(
++    session: Session,
++) -> list[dict[str, Any]]:
++    """List the user's membership/circle plans (月額メンバーシッププラン).
++
++    Uses `/v3/memberships/magazines/connectable_plans`. These are the plans
++    that can be attached to a published article via the `circle_permissions`
++    field on the publish endpoint.
++
++    Returns:
++        List of circle plan dicts. Each entry typically includes:
++            - key (str, e.g. "458a7b74051c") — the plan key used in
++              `circle_permissions`
++            - name (str) — plan display name
++            - price (int) — monthly price in JPY
++            - start_at, end_at (ISO timestamps)
++    """
++    async with NoteAPIClient(session) as client:
++        response = await client.get("/v3/memberships/magazines/connectable_plans")
++
++    data = response.get("data", [])
++    if isinstance(data, dict):
++        # Older shape: data.plans
++        data = data.get("plans", []) or []
++    return [p for p in data if isinstance(p, dict)]
