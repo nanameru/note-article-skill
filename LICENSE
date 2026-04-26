@@ -1,21 +1,145 @@
-MIT License
-
+note-article-skill License
 Copyright (c) 2026 nanameru
+SPDX-Identifier: LicenseRef-NotearticleSkill-1.0
+Source-available license; NOT OSI-approved.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+================================================================================
+English
+================================================================================
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+1. Grant of License
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+Subject to the terms of this License, the Licensor hereby grants you a
+worldwide, royalty-free, non-exclusive license to:
+
+  (a) use the Software for any lawful purpose, including commercial use
+      within your own products, services, or workflows;
+  (b) reproduce, modify, and create derivative works of the Software;
+  (c) distribute the Software or derivative works as part of a larger
+      product whose primary value is not this Software itself.
+
+2. Attribution Requirement
+
+Any redistribution, public deployment, or use that exposes the Software
+(or substantial portions of it) to third parties MUST include a clearly
+visible reference to the original source repository:
+
+    "Built on note-article-skill (https://github.com/nanameru/note-article-skill)"
+
+The reference must appear in at least one of: the project README, the
+"About" page of any product that incorporates this Software, the LICENSE
+or NOTICE file, or in-product documentation.
+
+3. Prohibition on Repackaged Resale
+
+You may NOT, without prior written permission from the Licensor:
+
+  (a) sell, license, or otherwise commercially distribute the Software,
+      a derivative work of it, or a repackaged version of it as a
+      stand-alone product or kit whose primary purpose substantially
+      duplicates this Software (i.e., a competing "note article
+      automation skill / kit");
+  (b) offer this Software (or a substantial derivative of it) as a paid
+      managed service whose principal feature is its functionality.
+
+For clarity: integrating this Software into a larger application,
+website, or service whose primary value is something else (e.g., your
+own SaaS product, your own writing platform, your client work) is
+expressly permitted under Section 1.
+
+4. Preservation of Notices
+
+You must retain all copyright, license, and attribution notices in the
+Software. Removing or obscuring them is a material breach.
+
+5. Third-Party Components
+
+This repository may reference or include patches against third-party
+software (notably drillan/note-mcp). Such references are governed by
+their own terms; this License grants no rights over them.
+
+6. Disclaimer of Warranty
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+
+7. Limitation of Liability
+
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES, OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT, OR OTHERWISE, ARISING FROM, OUT OF, OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+8. Termination
+
+If you breach this License, your rights under it terminate
+automatically. You may cure breaches related to attribution within 30
+days of becoming aware of the breach to reinstate your rights.
+
+================================================================================
+日本語（参考訳・法的拘束力は英語原文が優先）
+================================================================================
+
+1. ライセンス付与
+
+本ライセンスの条件のもとで、ライセンサーは利用者に対し、以下を行う
+全世界・無償・非独占の権利を付与します。
+
+  (a) 商用利用を含む適法な目的で本ソフトウェアを利用すること
+     （自社プロダクト・サービス・業務フローへの組み込みを含む）
+  (b) 本ソフトウェアを複製・改変・派生物作成すること
+  (c) 本ソフトウェアそのものが主たる価値ではない、より大きな製品の
+     一部として本ソフトウェアまたは派生物を配布すること
+
+2. 帰属表示の義務
+
+本ソフトウェア（またはその主要部分）を再配布・公開デプロイ・第三者へ
+公開する場合、元リポジトリへの参照を明確に表示する必要があります。
+
+    "Built on note-article-skill (https://github.com/nanameru/note-article-skill)"
+
+表示先は、プロジェクトの README、製品の About ページ、LICENSE または
+NOTICE ファイル、製品内ドキュメント のうち、少なくとも一箇所。
+
+3. 再パッケージ販売の禁止
+
+ライセンサーの事前書面許可なく、以下を行うことはできません。
+
+  (a) 本ソフトウェアまたはその実質的派生物を、本ソフトウェアと実質的に
+     同等の機能を主目的とする独立プロダクト／キット
+     （競合する "note 記事自動化スキル / キット" 等）として
+     販売・ライセンス供与・商用配布すること
+  (b) 本ソフトウェアの機能を主機能とする有料マネージドサービスとして
+     提供すること
+
+明確化：本ソフトウェアを、主目的が別にあるより大きなアプリケーション・
+Web サイト・サービスに組み込んで提供することは、第1条のもとで許可
+されています（自社 SaaS、ライティングプラットフォーム、受託案件等）。
+
+4. 表示の保持
+
+ソフトウェア中の著作権表示、ライセンス通知、帰属表示はすべて保持して
+ください。これらの除去・隠蔽は重大な違反となります。
+
+5. サードパーティ構成要素
+
+本リポジトリは drillan/note-mcp などサードパーティのソフトウェアへ
+参照やパッチを含むことがあります。これらは各自のライセンスに従います。
+本ライセンスはそれらに対する権利を付与しません。
+
+6. 無保証
+
+本ソフトウェアは「現状のまま」提供され、商品性、特定目的適合性、
+権利非侵害性などのいかなる保証もありません。
+
+7. 責任制限
+
+ソフトウェアまたはその利用に起因または関連する一切の請求・損害・
+その他責任について、作者・著作権者は責任を負いません。
+
+8. 終了
+
+本ライセンスの条件に違反した場合、利用者の権利は自動的に終了します。
+帰属表示に関する違反は、認識から30日以内に是正することで権利を回復
+することができます。
