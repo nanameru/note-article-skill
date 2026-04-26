@@ -162,6 +162,17 @@ sips --resampleHeightWidth 670 1280 "$DST" >/dev/null
 - 画像サイズは横 1200px 程度で十分（大きすぎるとアップロード遅い）
 - フォーマットは PNG が確実（JPEG/GIF/WebP も可）
 
+### Step 7.5: 公開後の本文修正は必ず再 publish が必要
+
+**重要な落とし穴**: `note_update_article` は **下書き（`note_draft.body`）だけを更新**する。すでに公開済みの記事に対して呼んでも、**読者が見る公開側の本文は古いまま**になる。
+
+公開後に本文を修正したら、**必ず `note_publish_article` を再度呼んで公開側に反映**する。
+
+注意点：
+
+- 本文を更新するとブロックの UUID が再生成されるため、**`separator_uuid` も新しい body から取り直す**必要がある（古い UUID を渡すと `有料エリアを再度設定し直してください` エラーで失敗）
+- 流れ: `note_update_article` → `note_get_separator_candidates` で新 UUID 取得 → `note_publish_article(separator_uuid=新UUID, ...)` で再公開
+
 ### Step 8: ユーザーに確認して公開
 
 下書き URL をユーザーに伝え、プレビュー確認を促す。ユーザーが「公開して」と言ったら `note_publish_article` を呼ぶ。**ユーザーの明示的な許可なく公開しない**。
