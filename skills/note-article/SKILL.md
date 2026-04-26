@@ -172,6 +172,7 @@ sips --resampleHeightWidth 670 1280 "$DST" >/dev/null
 
 - 本文を更新するとブロックの UUID が再生成されるため、**`separator_uuid` も新しい body から取り直す**必要がある（古い UUID を渡すと `有料エリアを再度設定し直してください` エラーで失敗）
 - 流れ: `note_update_article` → `note_get_separator_candidates` で新 UUID 取得 → `note_publish_article(separator_uuid=新UUID, ...)` で再公開
+- **タイトル変更の地雷**: `note_publish_article` は内部的に `/v3/notes/{id}` の `data.name`（公開版タイトル）を再利用してしまうため、`note_update_article` で新タイトルに変えた後に `note_publish_article` を呼ぶと **公開側のタイトルは古いままになる**。確実に直すには `PUT /v1/text_notes/{numeric_id}` を直接叩いて `name` フィールドに新タイトルを明示的に渡す。直接叩くサンプルは note-mcp-patches/changes.patch を参照
 
 ### Step 8: ユーザーに確認して公開
 
