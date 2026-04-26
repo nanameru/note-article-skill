@@ -127,6 +127,23 @@ sips --resampleHeightWidth 670 1280 "$DST" >/dev/null
 
 クロップ後の画像パスを `note_upload_eyecatch` に渡す。
 
+### Step 6.5: 動画クリップの本文埋め込み
+
+note の本文画像 API（`note_upload_body_image`）が受け付けるのは **`.gif` / `.jpeg` / `.jpg` / `.png` / `.webp`** のみ。**mp4 はアップロード不可**。  
+重要な制約：
+
+- `.webp` は **静止画は OK だがアニメーション WebP は API 側で `invalid_param` エラーで弾かれる**（note 側のバグ or 仕様）
+- `.gif` のアニメーションは OK。**ただし 10MB 以下**に収める必要がある
+- 動画クリップを本文に埋めたいなら：
+  1. **GIF 化が唯一の現実解**（10MB 以下に収まる長さ・解像度・フレームレートに調整）
+  2. 推奨パラメータ（15秒の SNS クリップで 9〜10MB に収まる）：
+     ```bash
+     ffmpeg -y -i src.mp4 \
+       -vf "fps=10,scale=450:-2:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=64[p];[s1][p]paletteuse=dither=bayer:bayer_scale=5" \
+       -loop 0 clip.gif
+     ```
+  3. それ以上長い動画はフル画質 mp4 を YouTube/Vimeo に上げて URL 単独行で埋め込む（note がリッチプレビュー化する）
+
 ### Step 7: 本文画像のアップロード & 挿入
 
 本文中に **適度に画像を挟む**（読みやすさ・視認性アップのため）。プレースホルダーは `<!-- IMAGE: 画像内容の説明 -->` 形式で本文に残しておき、このステップで実画像に置き換える。
