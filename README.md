@@ -78,15 +78,12 @@ skills/note-article/
 
 note-mcp-patches/                   # drillan/note-mcp への拡張パッチ
 ├── README.md                       # 適用方法
-├── changes.patch                   # git apply 用パッチ
-└── src/note_mcp/                   # 上書きコピー用の修正済みファイル一式
-    ├── api/articles.py             # set_paid_settings, get_separator_candidates, publish_article 拡張
-    ├── api/magazines.py            # 新規（list_my_magazines, list_circle_plans）
-    ├── server.py                   # 新MCPツール追加
-    └── auth/browser.py             # Cookie保存バグ修正
+├── changes.patch                   # 当方が追加した差分のみ（git apply 用）
+└── magazines.py                    # 新規（list_my_magazines, list_circle_plans）
 ```
 
-`note-mcp-patches/` は、本スキルが利用する有料記事 / メンバーシップ / マガジン操作を有効にするためのパッチ群です。詳細は [note-mcp-patches/README.md](./note-mcp-patches/README.md) を参照してください。
+`note-mcp-patches/` は、本スキルが利用する有料記事 / メンバーシップ / マガジン操作を有効にするためのパッチ群です。  
+**drillan/note-mcp 本体は各自で clone してください**（このリポジトリには再配布していません）。詳細な手順は [note-mcp-patches/README.md](./note-mcp-patches/README.md) を参照してください。
 
 ## トラブルシュート
 

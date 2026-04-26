@@ -1,6 +1,8 @@
 # note-mcp 拡張パッチ
 
-このディレクトリは、本スキルが活用する [drillan/note-mcp](https://github.com/drillan/note-mcp) に対するローカル拡張パッチです。
+このディレクトリは、本スキルが活用する [drillan/note-mcp](https://github.com/drillan/note-mcp) に **ローカルパッチを当てる**ためのファイル群です。
+
+> **再配布ポリシー**: 本ディレクトリには drillan/note-mcp のソースコードそのものは含めていません。`changes.patch` は当方が追加した差分（`+` 行）と適用に必要な最小限のコンテキストのみ、`magazines.py` は当方が新規作成した完全オリジナルファイルです。drillan/note-mcp 本体は各自で clone してください。
 
 ## 追加・変更内容
 
@@ -13,40 +15,32 @@
 | **公開ツール拡張** | `note_publish_article` | `magazine_keys` / `circle_plan_keys` / `price` / `separator_uuid` / `limited` / `disable_comment` パラメータを追加 |
 | **Cookie 保存バグ修正** | （`auth/browser.py` パッチ） | ログイン直後のユーザー名取得失敗で Cookie が捨てられる問題を修正 |
 
-## 適用方法
+## 適用手順
 
-### 方法1: ファイルを丸ごと上書き（最速）
-
-drillan/note-mcp の clone に対して、以下の4ファイルを上書きコピー：
+### 1. drillan/note-mcp を clone（または既存 clone を使用）
 
 ```bash
-cd /path/to/your/note-mcp/clone
-
-cp /path/to/note-article-skill/note-mcp-patches/src/note_mcp/api/articles.py    src/note_mcp/api/articles.py
-cp /path/to/note-article-skill/note-mcp-patches/src/note_mcp/api/magazines.py   src/note_mcp/api/magazines.py
-cp /path/to/note-article-skill/note-mcp-patches/src/note_mcp/server.py          src/note_mcp/server.py
-cp /path/to/note-article-skill/note-mcp-patches/src/note_mcp/auth/browser.py    src/note_mcp/auth/browser.py
+git clone https://github.com/drillan/note-mcp.git
+cd note-mcp
 ```
 
-そのあと Claude Code を再起動すると、新ツールが MCP として認識されます。
-
-### 方法2: パッチファイル経由
+### 2. パッチを適用
 
 ```bash
-cd /path/to/your/note-mcp/clone
 git apply /path/to/note-article-skill/note-mcp-patches/changes.patch
 ```
 
-ただし、上流の note-mcp に大きな変更が入ると `git apply` は失敗するので、その場合は方法1で上書きしてください。
+### 3. 新規ファイル（マガジン関連）を追加
 
-## 既知の前提
+`changes.patch` には新規ファイルは含まれていません。以下を別途コピーしてください：
 
-- 上記パッチは drillan/note-mcp の `main` ブランチ（v0 系）に適用することを想定。  
-  メジャーバージョン更新後は、再度パッチを当て直す必要があります。
-- 上書き前に元ファイルをバックアップしておくことを推奨：
-  ```bash
-  cp src/note_mcp/api/articles.py src/note_mcp/api/articles.py.bak
-  ```
+```bash
+cp /path/to/note-article-skill/note-mcp-patches/magazines.py src/note_mcp/api/magazines.py
+```
+
+### 4. Claude Code を再起動
+
+これで新ツールが MCP として認識されます。
 
 ## 動作確認
 
@@ -60,13 +54,26 @@ git apply /path/to/note-article-skill/note-mcp-patches/changes.patch
 > note_publish_article(article_id="...", circle_plan_keys=["..."], price=500, separator_uuid="...", limited=True)
 ```
 
+## 既知の前提
+
+- 上記パッチは drillan/note-mcp の `main` ブランチ（v0 系）を想定。  
+  上流が大きく変わると `git apply` が失敗するので、その場合はパッチを参考に手動マージしてください。
+- 上書き前に元ファイルをバックアップしておくことを推奨。
+
 ## 上流への取り込み（PR 化）について
 
-ここの拡張内容を drillan/note-mcp に Pull Request として提案するのは歓迎です。  
-ただし以下の項目を補強してから出すのが現実的です：
+このパッチを drillan/note-mcp に Pull Request として提案するのは歓迎です。  
+出す前に補強しておきたい項目：
 
 - [ ] テストコード（pytest フィクスチャ + recorded fixtures）
 - [ ] フィールド名の API stability チェック（`circle_permissions` のような内部フィールドは将来変わる可能性あり）
 - [ ] エラーハンドリングの厚み（HTTP 422 / 401 / 403 などの分岐）
 - [ ] ドキュメント（README + docstring 拡充）
-- [ ] `INVESTIGATOR_MODE` を使った API 探索ノート
+
+PR 化が成功すれば、本ディレクトリ自体を削除して上流に揃えるのが理想です。
+
+## ライセンスについて
+
+- `magazines.py` および `changes.patch` は本リポジトリの MIT ライセンスに従います
+- drillan/note-mcp 自体のライセンス条項は drillan さんのリポジトリを参照してください  
+  （2026-04 時点で LICENSE ファイルが置かれていないため、利用前に確認することを推奨）
