@@ -47,18 +47,34 @@ async def list_my_magazines() -> list[dict[str, Any]]:
 
 
 async def list_circle_plans() -> list[dict[str, Any]]:
-    """Returns the user's connectable membership plans."""
+    """Returns the user's connectable membership plans.
+
+    The API returns one of two shapes depending on the endpoint version:
+
+    - ``{"data": [<plan>, ...]}``      ← current /v3 endpoint
+    - ``{"data": {"plans": [...]}}``    ← legacy shape (kept for safety)
+    """
     async with NoteClient() as client:
         response = await client.get("/v3/memberships/magazines/connectable_plans")
-    data = response.get("data", {})
-    plans = data.get("plans") or data.get("connectable_plans") or []
+    data = response.get("data") if isinstance(response, dict) else response
+    if isinstance(data, list):
+        plans = data
+    elif isinstance(data, dict):
+        plans = data.get("plans") or data.get("connectable_plans") or []
+    else:
+        plans = []
     return [
         {
             "key": p.get("key") or p.get("id"),
             "name": p.get("name"),
             "price": p.get("price"),
+            "circle_key": (p.get("circle") or {}).get("key") if isinstance(p.get("circle"), dict) else p.get("circle_key"),
+            "circle_name": (p.get("circle") or {}).get("name") if isinstance(p.get("circle"), dict) else p.get("circle_name"),
             "circle_id": p.get("circle_id"),
             "magazine_key": p.get("magazine_key"),
+            "status": p.get("status"),
+            "is_owner": p.get("is_owner"),
         }
         for p in plans
+        if isinstance(p, dict)
     ]
